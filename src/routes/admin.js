@@ -24,6 +24,70 @@ router.get('/stats', adminAuth, async (req, res) => {
     }
 });
 
+// GET /api/admin/stats/daily?days=7|14|30
+router.get('/stats/daily', adminAuth, async (req, res) => {
+    const days = Math.min(Math.max(parseInt(req.query.days || '7'), 1), 90);
+    try {
+        // Tạo dãy ngày liên tục rồi LEFT JOIN để những ngày không có data vẫn hiện 0
+        const { rows } = await pool.query(
+            `SELECT
+                date_series.day::date                                  AS date,
+                COALESCE(SUM(w.steps), 0)::bigint                     AS total_steps,
+                COUNT(w.id)::int                                       AS workout_count,
+                COALESCE(MAX(nu.new_users), 0)::int                   AS new_users
+             FROM generate_series(
+                 (NOW() - INTERVAL '1 day' * ($1 - 1))::date,
+                 NOW()::date,
+                 '1 day'::interval
+             ) AS date_series(day)
+             LEFT JOIN workouts w
+                 ON w.started_at::date = date_series.day::date
+             LEFT JOIN (
+                 SELECT created_at::date AS day, COUNT(*)::int AS new_users
+                 FROM users WHERE is_admin = FALSE
+                 GROUP BY created_at::date
+             ) nu ON nu.day = date_series.day::date
+             GROUP BY date_series.day
+             ORDER BY date_series.day ASC`,
+            [days]
+        );
+        res.json({ daily: rows });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// GET /api/admin/stats/distributions
+router.get('/stats/distributions', adminAuth, async (req, res) => {
+    try {
+        const [modesRes, gendersRes] = await Promise.all([
+            // Phân bố chế độ vận động từ bảng workouts
+            pool.query(
+                `SELECT mode, COUNT(*)::int AS count
+                 FROM workouts
+                 GROUP BY mode
+                 ORDER BY count DESC`
+            ),
+            // Phân bố giới tính từ bảng users (không đếm admin)
+            pool.query(
+                `SELECT COALESCE(gender, 'Unknown') AS gender, COUNT(*)::int AS count
+                 FROM users
+                 WHERE is_admin = FALSE
+                 GROUP BY gender
+                 ORDER BY count DESC`
+            ),
+        ]);
+        res.json({
+            modes:   modesRes.rows,
+            genders: gendersRes.rows,
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // GET /api/admin/users
 router.get('/users', adminAuth, async (req, res) => {
     const limit   = Math.min(parseInt(req.query.limit  || '50'), 9999);
@@ -65,8 +129,13 @@ router.get('/users', adminAuth, async (req, res) => {
 
 // POST /api/admin/users/:id/suspend
 router.post('/users/:id/suspend', adminAuth, async (req, res) => {
+    const { reason } = req.body;
     try {
-        await pool.query('UPDATE users SET is_suspended=TRUE WHERE id=$1 AND is_admin=FALSE', [req.params.id]);
+        const { rowCount } = await pool.query(
+            'UPDATE users SET is_suspended=TRUE, suspended_at=NOW(), suspend_reason=$2 WHERE id=$1 AND is_admin=FALSE',
+            [req.params.id, reason?.trim() || null]
+        );
+        if (!rowCount) return res.status(404).json({ error: 'User not found' });
         res.json({ success: true });
     } catch (err) {
         console.error(err);
@@ -77,7 +146,11 @@ router.post('/users/:id/suspend', adminAuth, async (req, res) => {
 // POST /api/admin/users/:id/activate
 router.post('/users/:id/activate', adminAuth, async (req, res) => {
     try {
-        await pool.query('UPDATE users SET is_suspended=FALSE WHERE id=$1 AND is_admin=FALSE', [req.params.id]);
+        const { rowCount } = await pool.query(
+            'UPDATE users SET is_suspended=FALSE, suspended_at=NULL, suspend_reason=NULL WHERE id=$1 AND is_admin=FALSE',
+            [req.params.id]
+        );
+        if (!rowCount) return res.status(404).json({ error: 'User not found' });
         res.json({ success: true });
     } catch (err) {
         console.error(err);
@@ -101,7 +174,7 @@ router.patch('/users/:id/role', adminAuth, async (req, res) => {
 router.get('/users/:id', adminAuth, async (req, res) => {
     try {
         const { rows } = await pool.query(
-            `SELECT id,name,email,gender,age,weight,height,step_goal,is_admin,is_suspended,created_at FROM users WHERE id=$1`,
+            `SELECT id,name,email,gender,age,weight,height,step_goal,is_admin,is_suspended,suspended_at,suspend_reason,created_at FROM users WHERE id=$1`,
             [req.params.id]
         );
         if (!rows.length) return res.status(404).json({ error: 'Not found' });

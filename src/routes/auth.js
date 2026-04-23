@@ -37,6 +37,12 @@ router.post('/login', async (req, res) => {
         const user = rows[0];
         const ok   = await bcrypt.compare(password, user.password);
         if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+        if (user.is_suspended) {
+            const msg = user.suspend_reason
+                ? `Tài khoản của bạn đã bị khoá. Lý do: ${user.suspend_reason}`
+                : 'Tài khoản của bạn đã bị khoá bởi quản trị viên.';
+            return res.status(403).json({ error: msg, suspended: true });
+        }
         const token = jwt.sign({ id: user.id, email: user.email, is_admin: user.is_admin },
             process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
         res.json({ token, user: { id: user.id, name: user.name, email: user.email, is_admin: user.is_admin } });

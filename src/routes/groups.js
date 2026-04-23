@@ -243,14 +243,13 @@ router.post('/:id/schedules', auth, async (req, res) => {
     if (!title || !title.trim()) return res.status(400).json({ error: 'title required' });
     if (!scheduled_at)          return res.status(400).json({ error: 'scheduled_at required' });
 
-    // Verify user is a member of this group
-    const { rows: memberCheck } = await pool.query(
-        'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
-        [req.params.id, req.user.id]
-    );
-    if (!memberCheck.length) return res.status(403).json({ error: 'Not a member of this group' });
-
     try {
+        // Verify user is a member of this group
+        const { rows: memberCheck } = await pool.query(
+            'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
+            [req.params.id, req.user.id]
+        );
+        if (!memberCheck.length) return res.status(403).json({ error: 'Not a member of this group' });
         const { rows } = await pool.query(
             `INSERT INTO run_schedules (group_id, title, scheduled_at, location, distance_km, notes, created_by)
              VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
@@ -305,14 +304,13 @@ router.post('/:id/invite', auth, async (req, res) => {
     const { user_id } = req.body;
     if (!user_id) return res.status(400).json({ error: 'user_id required' });
 
-    // Check requester is a member
-    const { rows: memberCheck } = await pool.query(
-        'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
-        [req.params.id, req.user.id]
-    );
-    if (!memberCheck.length) return res.status(403).json({ error: 'Not a member of this group' });
-
     try {
+        // Check requester is a member
+        const { rows: memberCheck } = await pool.query(
+            'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
+            [req.params.id, req.user.id]
+        );
+        if (!memberCheck.length) return res.status(403).json({ error: 'Not a member of this group' });
         const { rows: existing } = await pool.query(
             'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
             [req.params.id, user_id]
