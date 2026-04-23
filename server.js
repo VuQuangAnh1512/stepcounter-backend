@@ -1,6 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
+const fs      = require('fs');
+const path    = require('path');
+const pool    = require('./src/db');
 
 const app = express();
 
@@ -22,5 +25,20 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
+// Tự động tạo bảng và seed data khi server khởi động
+async function initDatabase() {
+    try {
+        const schema = fs.readFileSync(
+            path.join(__dirname, 'src/db/schema.sql'), 'utf8'
+        );
+        await pool.query(schema);
+        console.log('Database initialized successfully');
+    } catch (err) {
+        console.error('Database init error:', err.message);
+    }
+}
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`StepCounter API running on port ${PORT}`));
+initDatabase().then(() => {
+    app.listen(PORT, () => console.log(`StepCounter API running on port ${PORT}`));
+});
