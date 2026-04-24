@@ -13,9 +13,11 @@ CREATE TABLE IF NOT EXISTS users (
     weight      REAL,
     height      REAL,
     step_goal    INTEGER DEFAULT 10000,
-    is_admin     BOOLEAN DEFAULT FALSE,
-    is_suspended BOOLEAN DEFAULT FALSE,
-    created_at   TIMESTAMPTZ DEFAULT NOW()
+    is_admin       BOOLEAN DEFAULT FALSE,
+    is_suspended   BOOLEAN DEFAULT FALSE,
+    suspended_at   TIMESTAMPTZ,
+    suspend_reason TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ── Workouts ─────────────────────────────────────────────────

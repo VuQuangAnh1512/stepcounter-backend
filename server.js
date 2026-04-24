@@ -25,13 +25,23 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
-// Tự động tạo bảng và seed data khi server khởi động
+// Tự động tạo bảng, seed data và chạy migrations khi server khởi động
 async function initDatabase() {
     try {
         const schema = fs.readFileSync(
             path.join(__dirname, 'src/db/schema.sql'), 'utf8'
         );
         await pool.query(schema);
+
+        // Chạy các migration để thêm cột còn thiếu (idempotent)
+        const migrations = [
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ`,
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspend_reason TEXT`,
+        ];
+        for (const sql of migrations) {
+            await pool.query(sql);
+        }
+
         console.log('Database initialized successfully');
     } catch (err) {
         console.error('Database init error:', err.message);
