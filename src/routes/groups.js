@@ -15,12 +15,16 @@ router.get('/', auth, async (req, res) => {
         const { rows } = await pool.query(
             `SELECT g.id, g.name, g.description, g.invite_code, g.owner_id,
                     g.running_level, g.target_km_per_week,
-                    COUNT(gm.user_id)::int AS member_count
+                    COUNT(gm.user_id)::int AS member_count,
+                    EXISTS(
+                        SELECT 1 FROM group_members
+                        WHERE group_id = g.id AND user_id = $1
+                    ) AS is_member
              FROM groups g
              LEFT JOIN group_members gm ON gm.group_id = g.id
              GROUP BY g.id
              ORDER BY g.created_at DESC`,
-            []
+            [req.user.id]
         );
         res.json(rows);
     } catch (err) {
@@ -74,14 +78,14 @@ router.post('/join-by-code', auth, async (req, res) => {
             'SELECT * FROM groups WHERE invite_code=$1',
             [invite_code.trim().toUpperCase()]
         );
-        if (!rows.length) return res.status(404).json({ message: 'Mã mời không hợp lệ' });
+        if (!rows.length) return res.status(404).json({ message: 'Invalid invite code' });
         const group = rows[0];
 
         const { rows: existing } = await pool.query(
             'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
             [group.id, req.user.id]
         );
-        if (existing.length) return res.status(409).json({ message: 'Bạn đã là thành viên nhóm này' });
+        if (existing.length) return res.status(409).json({ message: 'You are already a member of this group' });
 
         await pool.query(
             'INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)',
@@ -297,6 +301,30 @@ router.delete('/:groupId/schedules/:scheduleId/join', auth, async (req, res) => 
     }
 });
 
+// DELETE /api/groups/:groupId/schedules/:scheduleId
+router.delete('/:groupId/schedules/:scheduleId', auth, async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            'SELECT * FROM run_schedules WHERE id=$1 AND group_id=$2',
+            [req.params.scheduleId, req.params.groupId]
+        );
+        if (!rows.length) return res.status(404).json({ error: 'Schedule not found' });
+
+        const schedule = rows[0];
+        if (schedule.created_by !== req.user.id) {
+            return res.status(403).json({ error: 'Only the creator can delete this schedule' });
+        }
+
+        await pool.query('DELETE FROM schedule_participants WHERE schedule_id=$1', [schedule.id]);
+        await pool.query('DELETE FROM run_schedules WHERE id=$1', [schedule.id]);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // ── Invite member ─────────────────────────────────────────────
 
 // POST /api/groups/:id/invite
@@ -315,7 +343,7 @@ router.post('/:id/invite', auth, async (req, res) => {
             'SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2',
             [req.params.id, user_id]
         );
-        if (existing.length) return res.status(409).json({ message: 'Người dùng đã là thành viên' });
+        if (existing.length) return res.status(409).json({ message: 'User is already a member' });
 
         await pool.query(
             'INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)',

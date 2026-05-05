@@ -33,10 +33,20 @@ async function initDatabase() {
         );
         await pool.query(schema);
 
-        // Chạy các migration để thêm cột còn thiếu (idempotent)
+        // Chạy các migration để thêm cột còn thiếu (idempotent - an toàn khi chạy nhiều lần)
         const migrations = [
+            // users
             `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ`,
             `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspend_reason TEXT`,
+            // challenges
+            `ALTER TABLE challenges ADD COLUMN IF NOT EXISTS type       VARCHAR(20) NOT NULL DEFAULT 'STEPS'`,
+            `ALTER TABLE challenges ADD COLUMN IF NOT EXISTS difficulty  VARCHAR(10) NOT NULL DEFAULT 'MEDIUM'`,
+            `ALTER TABLE challenges ADD COLUMN IF NOT EXISTS days_total  INTEGER     NOT NULL DEFAULT 30`,
+            // cập nhật dữ liệu mẫu challenges nếu thiếu
+            `UPDATE challenges SET type='STEPS', difficulty='EASY',   days_total=7  WHERE title='First Steps'   AND difficulty='MEDIUM'`,
+            `UPDATE challenges SET type='STEPS', difficulty='MEDIUM', days_total=1  WHERE title='Daily Walker'  AND days_total=30`,
+            `UPDATE challenges SET type='STEPS', difficulty='HARD',   days_total=30 WHERE title='Marathon Ready' AND difficulty='MEDIUM'`,
+            `UPDATE challenges SET type='STEPS', difficulty='HARD',   days_total=30 WHERE title='Step Master'   AND difficulty='MEDIUM'`,
         ];
         for (const sql of migrations) {
             await pool.query(sql);

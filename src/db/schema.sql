@@ -105,8 +105,8 @@ CREATE TABLE IF NOT EXISTS schedule_participants (
 -- Default admin user (password: admin123)
 INSERT INTO users (name, email, password, is_admin)
 VALUES ('Admin', 'admin@stepcounter.com',
-        '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17', TRUE)
-ON CONFLICT (email) DO NOTHING;
+        '$2a$10$BlaeFCWW7R/Q2/OZIXPTiu1jhFe62hMzdd1FUYb65yFxcQ8.y52Ki', TRUE)
+ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, is_admin = TRUE;
 
 -- Sample challenges
 INSERT INTO challenges (title, description, goal_steps, type, difficulty, days_total, reward, badge_emoji) VALUES
