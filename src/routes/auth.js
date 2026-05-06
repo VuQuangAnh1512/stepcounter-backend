@@ -3,6 +3,14 @@ const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const pool    = require('../db');
 
+function normalizeGender(g) {
+    if (!g) return null;
+    const lower = g.toString().toLowerCase();
+    if (lower === 'male')   return 'Male';
+    if (lower === 'female') return 'Female';
+    return null;
+}
+
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
     const { name, email, password, gender, age, weight, height, step_goal } = req.body;
@@ -14,7 +22,7 @@ router.post('/register', async (req, res) => {
         const { rows } = await pool.query(
             `INSERT INTO users (name, email, password, gender, age, weight, height, step_goal)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, name, email, is_admin`,
-            [name, email, hash, gender || null, age || null, weight || null, height || null, step_goal || 10000]
+            [name, email, hash, normalizeGender(gender), age || null, weight || null, height || null, step_goal || 10000]
         );
         const user  = rows[0];
         const token = jwt.sign({ id: user.id, email: user.email, is_admin: user.is_admin },
@@ -77,7 +85,7 @@ router.put('/profile', auth, async (req, res) => {
              age=COALESCE($3,age), weight=COALESCE($4,weight), height=COALESCE($5,height),
              step_goal=COALESCE($6,step_goal)
              WHERE id=$7 RETURNING id,name,email,gender,age,weight,height,step_goal`,
-            [name, gender, age, weight, height, step_goal, req.user.id]
+            [name, normalizeGender(gender), age, weight, height, step_goal, req.user.id]
         );
         res.json(rows[0]);
     } catch (err) {

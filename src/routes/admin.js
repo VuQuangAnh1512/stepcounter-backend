@@ -3,6 +3,14 @@ const bcrypt = require('bcryptjs');
 const pool   = require('../db');
 const { adminAuth } = require('../middleware/auth');
 
+function normalizeGender(g) {
+    if (!g) return null;
+    const lower = g.toString().toLowerCase();
+    if (lower === 'male')   return 'Male';
+    if (lower === 'female') return 'Female';
+    return null;
+}
+
 // GET /api/admin/stats
 router.get('/stats', adminAuth, async (req, res) => {
     try {
@@ -198,7 +206,7 @@ router.put('/users/:id', adminAuth, async (req, res) => {
              gender=COALESCE($3,gender), age=COALESCE($4,age), weight=COALESCE($5,weight),
              height=COALESCE($6,height), step_goal=COALESCE($7,step_goal)
              WHERE id=$8 RETURNING id,name,email,gender,age,weight,height,step_goal`,
-            [name, email, gender, age, weight, height, step_goal, req.params.id]
+            [name, email, normalizeGender(gender), age, weight, height, step_goal, req.params.id]
         );
         if (!rows.length) return res.status(404).json({ error: 'Not found' });
         res.json(rows[0]);
