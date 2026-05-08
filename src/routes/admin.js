@@ -117,8 +117,8 @@ router.get('/users', adminAuth, async (req, res) => {
     try {
         const { rows } = await pool.query(
             `SELECT id,name,email,gender,age,weight,height,step_goal,is_admin,is_suspended,created_at,
-                    (SELECT COUNT(*) FROM workouts WHERE user_id=users.id) as workout_count,
-                    (SELECT COALESCE(SUM(steps),0) FROM workouts WHERE user_id=users.id) as total_steps
+                    (SELECT COUNT(*) FROM workouts WHERE user_id=users.id)::int AS workout_count,
+                    (SELECT COALESCE(SUM(steps),0) FROM workouts WHERE user_id=users.id)::bigint AS total_steps
              FROM users
              WHERE is_admin=FALSE AND (name ILIKE $1 OR email ILIKE $1)
              ORDER BY ${orderClause} LIMIT $2 OFFSET $3`,
@@ -182,7 +182,12 @@ router.patch('/users/:id/role', adminAuth, async (req, res) => {
 router.get('/users/:id', adminAuth, async (req, res) => {
     try {
         const { rows } = await pool.query(
-            `SELECT id,name,email,gender,age,weight,height,step_goal,is_admin,is_suspended,suspended_at,suspend_reason,created_at FROM users WHERE id=$1`,
+            `SELECT id,name,email,gender,age,weight,height,step_goal,is_admin,is_suspended,suspended_at,suspend_reason,created_at,
+                    (SELECT COUNT(*) FROM workouts WHERE user_id=users.id)::int AS workout_count,
+                    (SELECT COALESCE(SUM(steps),0) FROM workouts WHERE user_id=users.id)::bigint AS total_steps,
+                    (SELECT COALESCE(SUM(distance),0) FROM workouts WHERE user_id=users.id) AS total_distance,
+                    (SELECT COALESCE(SUM(calories),0) FROM workouts WHERE user_id=users.id) AS total_calories
+             FROM users WHERE id=$1`,
             [req.params.id]
         );
         if (!rows.length) return res.status(404).json({ error: 'Not found' });
@@ -459,7 +464,7 @@ router.get('/groups/:id/members', adminAuth, async (req, res) => {
         const { rows } = await pool.query(
             `SELECT u.id, u.name, u.email, gm.joined_at,
                     COALESCE(SUM(w.steps), 0)::bigint        AS total_steps,
-                    COALESCE(SUM(w.distance)/1000.0, 0)      AS total_distance,
+                    COALESCE(SUM(w.distance), 0)             AS total_distance,
                     COUNT(w.id)::int                         AS workout_count
              FROM group_members gm
              JOIN users u ON u.id = gm.user_id
